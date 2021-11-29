@@ -48,11 +48,11 @@ pipeline {
         stage('Quality Check') {
             steps {
 				
-			   checkout([$class: 'GitSCM', branches: [[name: '*/master']], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'SparseCheckoutPaths', sparseCheckoutPaths: [[path: '/blick_pos/src/']]], [$class: 'RelativeTargetDirectory', relativeTargetDir: 'sonar']], submoduleCfg: [], userRemoteConfigs: [[credentialsId: '0d583dec-517c-4396-bdc5-5daf3a942a40', url: 'http://192.168.3.69:8888/root/blick.git']]])
+			   checkout([$class: 'GitSCM', branches: [[name: '*/master']], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'SparseCheckoutPaths', sparseCheckoutPaths: [[path: '/ksr_pos/src/']]], [$class: 'RelativeTargetDirectory', relativeTargetDir: 'sonar']], submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'sonali1994-skill', url: 'https://github.com/sonali1994-skill/cpx-xstore.git']]])
                script {
                 scannerHome = tool 'Sonar';
     			withSonarQubeEnv('Sonar') {
-      			sh "${scannerHome}/bin/sonar-scanner -Dsonar.analysis.mode=publish -Dsonar.host.url=http://192.168.2.141 -Dsonar.projectKey=BLICK -Dsonar.projectName=BLICK -Dsonar.sources=./blick_pos  -Dsonar.login=1b249939152990fd003a813968afcb44b0bce4c0 -Dsonar.java.binaries=./blick_pos"
+      			sh "${scannerHome}/bin/sonar-scanner -Dsonar.analysis.mode=publish -Dsonar.host.url=http://192.168.2.141 -Dsonar.projectKey=KSR -Dsonar.projectName=KSR -Dsonar.sources=./ksr_pos  -Dsonar.login=d61f1e99d1ce1886bdb1d2d8a821964330908de9 -Dsonar.java.binaries=./blick_pos"
     			}
     			
     		   }
@@ -66,7 +66,7 @@ pipeline {
         }
         
         
-   stage('Build & Copy Installer') {
+   /*stage('Build & Copy Installer') {
             steps {
 			  sh 'rm -rf installer'  
 			  copyArtifacts filter: 'blick/distro-full/OracleRetailXstorePointofService*.zip', fingerprintArtifacts: true, flatten: true, projectName: 'BLICK_18.0.3.0.75_DIST_UPGRADE', selector: specific("${params.XSTORE_BUILD_NUMBER}"), target: 'installer'
@@ -130,7 +130,7 @@ pipeline {
 						 echo $NEW_XCENTER_VERSION>NewVersions.txt
 						 echo $NEW_XADMIN_VERSION>>NewVersions.txt
 						 scp NewVersions.txt "root@$puppet_server:$PUPPET_CI_FOLDER/XCENTER/Upgrade/"
-                         ssh root@$puppet_server "chmod -R 777 $PUPPET_CI_FOLDER/XCENTER/Updates/"
+                         ssh root@$puppet_server "chmod -R 777 $PUPPET_CI_FOLDER/XCENTER/Upgrade/"
 						 
 						'''
         		         }
@@ -221,7 +221,7 @@ pipeline {
                     return "${params.ENVIRONMENT}".contains("sit") && "${params.PIPELINE_ACTIVITY}" == 'deploy';
                 }
             }
-        }
+        }*/
         
         
         
