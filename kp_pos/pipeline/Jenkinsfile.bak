@@ -52,7 +52,7 @@ pipeline {
                script {
                 scannerHome = tool 'sonar102';
     			withSonarQubeEnv('sonar102') {
-      			sh "${scannerHome}/bin/sonar-scanner -Dsonar.analysis.mode=publish -Dsonar.host.url=http://192.168.2.141 -Dsonar.projectKey=KSR -Dsonar.projectName=KSR -Dsonar.sources=./ksr_pos  -Dsonar.login=d61f1e99d1ce1886bdb1d2d8a821964330908de9 -Dsonar.java.binaries=./ksr_pos"
+      			sh "${scannerHome}/bin/sonar-scanner -Dsonar.analysis.mode=publish -Dsonar.host.url=http://192.168.2.141 -Dsonar.projectKey=CPX-XSTORE -Dsonar.projectName=CPX-XSTORE -Dsonar.sources=./ksr_pos  -Dsonar.login=0de89fd7ca77541e4ee39c4cfdc2245f53a02636 -Dsonar.java.binaries=./ksr_pos"
     			}
     			
     		   }
