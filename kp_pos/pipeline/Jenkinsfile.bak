@@ -1,0 +1,252 @@
+def app
+
+pipeline {
+
+    agent {
+        label 'master'
+    }
+    
+     environment {
+     
+     	DOCKER_IMAGE_NAME = 'xstore_blick_linux_oracle'
+     	DOCKER_FILE_DIRECTORY  = '/home/oracle/hbi/pos'
+     	XSTORE_CONTAINER_NAME= "blick-node-1"
+		DISPLAY='192.168.2.112:1'
+		EMAIL_LIST_EXT="${params.MANAGER_EMAIL_ID}"
+		ENABLED_TAGS="${params.ENABLED_TAGS}"
+		DISABLED_TAGS=""
+		CONFIG_PATH="test:version1:version1/patch"
+		PROXY_URL="http://192.168.3.20:3128"
+		PROJECT_NAME="XSTORE-blick"
+		PROJECT_ENV="DEV"
+		FTP_TYPE="HTTP-SERVER"
+		HTTP_SERVER="http://192.168.2.112:444/testreport"
+		HTTP_DIR="/var/www/html/testreport"
+        SMTP_HOST="smtp.skillnetinc.net"
+		SMTP_PORT="26"
+		SMTP_USER="noreply1@skillnetinc.net"
+		SMTP_PASS="aR7SFqf"
+		SMTP_FROM="noreply1@skillnetinc.net"
+				
+     }
+    
+
+
+    stages {
+        
+        stage('Cleanup Activity') {
+            steps {
+             	echo 'cleaning pipeline workspace'
+                echo 'cleaning puppet master directory'
+               }
+            when {
+                expression {
+                    return "${params.PIPELINE_ACTIVITY}" == 'deploy';
+                }
+            }
+        }
+        stage('Quality Check') {
+            steps {
+				
+			   checkout([$class: 'GitSCM', branches: [[name: '*/master']], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'SparseCheckoutPaths', sparseCheckoutPaths: [[path: '/blick_pos/src/']]], [$class: 'RelativeTargetDirectory', relativeTargetDir: 'sonar']], submoduleCfg: [], userRemoteConfigs: [[credentialsId: '0d583dec-517c-4396-bdc5-5daf3a942a40', url: 'http://192.168.3.69:8888/root/blick.git']]])
+               script {
+                scannerHome = tool 'Sonar';
+    			withSonarQubeEnv('Sonar') {
+      			sh "${scannerHome}/bin/sonar-scanner -Dsonar.analysis.mode=publish -Dsonar.host.url=http://192.168.2.141 -Dsonar.projectKey=BLICK -Dsonar.projectName=BLICK -Dsonar.sources=./blick_pos  -Dsonar.login=1b249939152990fd003a813968afcb44b0bce4c0 -Dsonar.java.binaries=./blick_pos"
+    			}
+    			
+    		   }
+				
+            }
+           when {
+                expression {
+                    return "${params.PIPELINE_ACTIVITY}" == 'deploy';
+                }
+            }
+        }
+        
+        
+   stage('Build & Copy Installer') {
+            steps {
+			  sh 'rm -rf installer'  
+			  copyArtifacts filter: 'blick/distro-full/OracleRetailXstorePointofService*.zip', fingerprintArtifacts: true, flatten: true, projectName: 'BLICK_18.0.3.0.75_DIST_UPGRADE', selector: specific("${params.XSTORE_BUILD_NUMBER}"), target: 'installer'
+			  copyArtifacts filter: 'blick/distro-full/OracleRetailXstoreOffice*.zip', fingerprintArtifacts: true, flatten: true, projectName: 'BLICK_18.0.3.0.75_DIST_UPGRADE', selector: specific("${params.XSTORE_BUILD_NUMBER}"), target: 'installer'
+			  
+             
+            }
+            when {
+                expression {
+                    return "${params.PIPELINE_ACTIVITY}" == 'deploy';
+                }
+            }
+        }
+      
+     
+    stage('Copy to Puppet Master') {
+            steps {
+                parallel 'Copy XStore Installer': {
+
+						withEnv(["puppet_server=${params.PUPPET_MASTER_IP}","pipeline_build_number=${env.BUILD_NUMBER}","xstore_version_x=${env.XSTORE_VERSION}"]) {
+				        sh '''
+						 BASEDIR=$(pwd)/installer
+						 PUPPET_CI_FOLDER=/tmp/build/Blick_upgrade/CI
+						 PRODUCTION_DIR=/tmp/build/Blick_upgrade/PRODCI
+						 ssh -t root@$puppet_server "cd $PUPPET_CI_FOLDER/XCENTER/Upgrade && mv -f NewVersions.txt CurrentVersions.txt "
+						 mkdir -p $PRODUCTION_DIR && cd $PRODUCTION_DIR && rm -rf *
+						 echo 'Inflating xstore installer'
+						 TDIR=$BASEDIR/installertmp
+						 unzip -o $BASEDIR/*XstorePointofService*.zip -d $TDIR
+						 cd $TDIR
+						 POSDIR=$(dirname "$(find $(pwd) -type d -name pos)")
+						 ssh -t root@$puppet_server "mkdir -p $PUPPET_CI_FOLDER/XSTORE/Installer/$xstore_version_x && mkdir -p $PUPPET_CI_FOLDER/XSTORE/Updates/ && chmod -R 777 $PUPPET_CI_FOLDER/XSTORE && echo $xstore_version_x > $PUPPET_CI_FOLDER/xstoreversion.txt "
+						 scp $BASEDIR/*XstorePointofService*.zip "root@$puppet_server:$PUPPET_CI_FOLDER/XSTORE/Installer/$xstore_version_x/xstore.zip"
+						 cp $BASEDIR/*XstorePointofService*.zip $PRODUCTION_DIR/
+						 ssh -t root@$puppet_server "chmod -R 777 $PUPPET_CI_FOLDER/XSTORE/"
+						 
+	
+						 echo 'Deleting temp directory'
+						 cd $BASEDIR && rm -rf $TDIR
+						 
+						 echo 'Inflating xoffice installer'
+						 TDIR=$BASEDIR/installertmp
+						 unzip -o $BASEDIR/*XstoreOffice*.zip -d $TDIR
+						 cd $TDIR
+						 XCENTER_DIR=$(dirname "$(find $(pwd) -type d -name xcenter)")
+						 ssh root@$puppet_server "mkdir -p $PUPPET_CI_FOLDER/XCENTER/Installer/ && mkdir -p $PUPPET_CI_FOLDER/XCENTER/Upgrade/"
+						 scp $BASEDIR/*XstoreOffice*.zip "root@$puppet_server:$PUPPET_CI_FOLDER/XCENTER/Installer/"
+						 cd $XCENTER_DIR/xcenter/
+						 echo 'Renaming wars with current time'
+						 for f in *.war ; do mv -- "$f" "$pipeline_build_number"_"$f" ; done
+						 echo 'Copying files to puppet master'
+						 scp *.war "root@$puppet_server:$PUPPET_CI_FOLDER/XCENTER/Upgrade/"
+						 cp *.war $PRODUCTION_DIR/
+						 echo 'Renaming Upgrade scripts'
+						 for f in *-upgrade*.sql ; do mv -- "$f" "$pipeline_build_number"_"$f" ; done
+						 scp *upgrade*.sql "root@$puppet_server:$PUPPET_CI_FOLDER/XCENTER/Upgrade/"
+						 cp *upgrade*.sql $PRODUCTION_DIR/
+						 cd $PRODUCTION_DIR
+						 export NEW_XCENTER_VERSION=$(ls -Art *xcenter*war | tail -1)
+						 export NEW_XADMIN_VERSION=$(ls -Art *xadmin*war | tail -1)
+						 echo $NEW_XCENTER_VERSION>NewVersions.txt
+						 echo $NEW_XADMIN_VERSION>>NewVersions.txt
+						 scp NewVersions.txt "root@$puppet_server:$PUPPET_CI_FOLDER/XCENTER/Upgrade/"
+                         ssh root@$puppet_server "chmod -R 777 $PUPPET_CI_FOLDER/XCENTER/Updates/"
+						 
+						'''
+        		         }
+					  },
+                    failFast: true
+
+
+            }
+            when {
+                expression {
+                    return "${params.PIPELINE_ACTIVITY}" == 'deploy';
+                }
+            }
+
+        }
+        
+    stage('Dev Xcenter Deployment') {
+            steps {
+			
+			
+                			
+				sh "ssh \"root@${params.PUPPET_MASTER_IP}\" \"cd /TestAutomationFramework/ && python JenkinPuppetBridge.py blick_dev_up_xce\""
+				
+				script {
+                   if ("${params.PIPELINE_ACTIVITY}".contains("deploy")) {                          
+                        emailext body: "Xcenter Version ${params.XSTORE_VERSION} deployment completed in Dev environment, Deploy this build in Dev environment? Please go to ${env.BUILD_URL}input/. ", recipientProviders: [ [$class: 'RequesterRecipientProvider']], subject: "${params.XSTORE_VERSION}- Job '${env.JOB_NAME}' (${env.BUILD_NUMBER}) is waiting for input",from:'noreply1@skillnetinc.net', to: "${params.MANAGER_EMAIL_ID}"    
+                        input message: "Xcenter Deployment completed in Dev environment, Deploy this build in SIT environment?", ok: 'Proceed'
+                    
+                    }
+                }
+			
+            }
+            when {
+                expression {
+                    return "${params.ENVIRONMENT}".contains("dev") && "${params.PIPELINE_ACTIVITY}" == 'deploy';
+                }
+            }
+        }	
+        
+    stage('DEV Deployment') {
+            steps {
+			
+			
+                			
+				sh "ssh \"root@${params.PUPPET_MASTER_IP}\" \"cd /TestAutomationFramework/ && python JenkinPuppetBridge.py blick_dev_inst\""
+				
+				script {
+                    if ("${params.ENVIRONMENT}".contains("sit")) {
+                        
+                        emailext body: "XStore Version ${params.XSTORE_VERSION} deployment completed in Dev environment, Please proceed with Manual testing on tills. Once testing is completed, To deploy this build in SIT tills, Please go to ${env.BUILD_URL}input/. ", recipientProviders: [ [$class: 'RequesterRecipientProvider']], subject: "${params.XSTORE_VERSION}- Job '${env.JOB_NAME}' (${env.BUILD_NUMBER}) is waiting for input",from:'noreply1@skillnetinc.net', to: "${params.MANAGER_EMAIL_ID}"    
+                        input message: "Deployment completed in Dev environment, Deploy this build in SIT environment?", ok: 'Proceed'
+                    
+                    }
+                }
+			
+            }
+            when {
+                expression {
+                    return "${params.ENVIRONMENT}".contains("dev") && "${params.PIPELINE_ACTIVITY}" == 'deploy';
+                }
+            }
+        }    
+        
+        
+        
+        
+        
+        
+    stage('SIT Deployment') {
+            steps {
+		
+		
+		  		sh "ssh \"root@${params.PUPPET_MASTER_IP}\" \"cd /TestAutomationFramework/ && python JenkinPuppetBridge.py blick_sit_xce\""
+				sh "ssh \"root@${params.PUPPET_MASTER_IP}\" \"cd /TestAutomationFramework/ && python JenkinPythonBridge.py blick_sit\""
+				
+                
+                script {
+                    if ("${params.ENVIRONMENT}".contains("uat")) {
+                        emailext body: "XStore Version ${params.XSTORE_VERSION} deployment completed in SIT environment, Please proceed with Manual testing on SIT tills. Once testing is completed, To deploy this build in UAT tills, Please go to ${env.BUILD_URL}input/. ", recipientProviders: [ [$class: 'RequesterRecipientProvider']], subject: "${params.XSTORE_VERSION}- Job '${env.JOB_NAME}' (${env.BUILD_NUMBER}) is waiting for input",from:'noreply1@skillnetinc.net', to: "${params.MANAGER_EMAIL_ID}"      
+                        input message: "Deployment completed in SIT environment, Deploy this build in UAT environment?", ok: 'Proceed', submitter: 'vendor-djadmin'
+                    
+                    }
+                }
+				
+            }
+            when {
+                expression {
+                    return "${params.ENVIRONMENT}".contains("sit") && "${params.PIPELINE_ACTIVITY}" == 'deploy';
+                }
+            }
+        }
+        
+        
+        
+	}
+	post {  
+         failure {  
+              script {
+                        mail(to: "${env.MANAGER_EMAIL_ID}",
+                        	from:'noreply1@skillnetinc.net',
+                            subject: "ERROR CI: Project name :'${env.JOB_NAME}' (${env.BUILD_NUMBER}-${params.XSTORE_VERSION}) Failed",
+                            body: "Pipeline Job - ${env.JOB_NAME} Failed, Please go to ${env.BUILD_URL}/");
+                }
+         }  
+         unstable {  
+             echo 'This will run only if the run was marked as unstable'  
+         }  
+     }  
+    parameters {
+        string(defaultValue: 'dev', description: '*Comma separated A) dev - Development environment </br> B) sit - SIT environment', name: 'ENVIRONMENT')
+        choice(name: 'PIPELINE_ACTIVITY',choices: "deploy\ntest",description: 'A) deploy - Deploy & execute test cases  <br> \nB) test - Do not deploy only execute test cases <br>\n this is applicable for all environment' )
+		string(defaultValue: 'sonali.shetkar@skillnetinc.com', description: 'Email id of manager(s) who will approve pipeline stages (Comma separated values)', name: 'MANAGER_EMAIL_ID')
+        string(defaultValue: '20', description: 'Build no of XStore installer to be installed', name: 'XSTORE_BUILD_NUMBER' )
+        string(defaultValue: '18.0.1.0.74-1.0.2-0.0-blick', description: 'xstore version', name: 'XSTORE_VERSION')
+        string(defaultValue: '192.168.2.83', description: 'IP of puppet master', name: 'PUPPET_MASTER_IP')
+        
+    }
+
+}
