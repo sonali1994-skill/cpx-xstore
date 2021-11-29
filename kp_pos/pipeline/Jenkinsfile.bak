@@ -50,8 +50,8 @@ pipeline {
 				
 			   checkout([$class: 'GitSCM', branches: [[name: '*/master']], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'SparseCheckoutPaths', sparseCheckoutPaths: [[path: '/ksr_pos/src/']]], [$class: 'RelativeTargetDirectory', relativeTargetDir: 'sonar']], submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'sonali1994-skill', url: 'https://github.com/sonali1994-skill/cpx-xstore.git']]])
                script {
-                scannerHome = tool 'Sonar';
-    			withSonarQubeEnv('Sonar') {
+                scannerHome = tool 'sonar102';
+    			withSonarQubeEnv('sonar102') {
       			sh "${scannerHome}/bin/sonar-scanner -Dsonar.analysis.mode=publish -Dsonar.host.url=http://192.168.2.141 -Dsonar.projectKey=KSR -Dsonar.projectName=KSR -Dsonar.sources=./ksr_pos  -Dsonar.login=d61f1e99d1ce1886bdb1d2d8a821964330908de9 -Dsonar.java.binaries=./ksr_pos"
     			}
     			
