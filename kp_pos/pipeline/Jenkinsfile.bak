@@ -48,7 +48,7 @@ pipeline {
         stage('Quality Check') {
             steps {
 				
-			   checkout([$class: 'GitSCM', branches: [[name: '*/master']], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'SparseCheckoutPaths', sparseCheckoutPaths: [[path: '/ksr_pos/src/']]], [$class: 'RelativeTargetDirectory', relativeTargetDir: 'sonar']], submoduleCfg: [], userRemoteConfigs: [[url: 'https://github.com/tarunguptaskn/cpx-xstore.git']]])
+			   checkout([$class: 'GitSCM', branches: [[name: '*/master']], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'SparseCheckoutPaths', sparseCheckoutPaths: [[path: '/ksr_pos/src/']]], [$class: 'RelativeTargetDirectory', relativeTargetDir: 'sonar']], submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'sonali1994-skill', url: 'https://github.com/tarunguptaskn/cpx-xstore.git']]])
                script {
                 scannerHome = tool 'sonar102';
     			withSonarQubeEnv('sonar102') {
